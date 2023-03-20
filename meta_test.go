@@ -8,7 +8,7 @@ import (
 
 func TestMeta(t *testing.T) {
 	hand := Holder{
-		columns: []string{"first", "second", "3rd", "force"},
+		Columns: []string{"first", "second", "3rd", "force"},
 		// values:  []interface{}{1, 23.45, 3},
 		// values: []interface{}{1, 23.45, true, "hey"},
 	}

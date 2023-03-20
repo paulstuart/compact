@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -210,7 +211,7 @@ func LineLen(r io.Reader, count int, headers int) (LineStats, error) {
 	var idx int
 	for scan.Scan() {
 		idx++
-		if idx <= headers {
+		if idx < headers {
 			continue // skip header
 		}
 		line := scan.Text()
@@ -224,7 +225,7 @@ func LineLen(r io.Reader, count int, headers int) (LineStats, error) {
 		stats.SampleSize++
 		if llen > stats.Max {
 			stats.Max = llen
-		} else if stats.Min == 0 || stats.Min < llen {
+		} else if stats.Min == 0 || stats.Min > llen {
 			stats.Min = llen
 		}
 		sum += int64(llen)
@@ -336,4 +337,126 @@ func LoadCSVHeaders(filename string, skip int, fn func([]string) error) error {
 		}
 	}
 	return nil
+}
+
+type FileInfo struct {
+	Source    string // source of the data
+	Bin       string // binary encoded version of the file
+	Headers   int    // count of header lines in source
+	Columns   []string
+	SampleRow []string
+	Stats     LineStats
+}
+
+func FileScan(filename string) (FileInfo, error) {
+	info := FileInfo{
+		Source: filename,
+	}
+	f, err := os.Open(filename)
+	if err != nil {
+		return info, fmt.Errorf("failed to open %q -- %w", filename, err)
+	}
+	defer f.Close()
+
+	scan := bufio.NewScanner(f)
+	var sum int64
+	var idx int
+	headCheck := true
+	const count = 100 // let's get percent
+	for scan.Scan() {
+		idx++
+		line := scan.Text()
+		cols := strings.Fields(line)
+		if strings.HasPrefix(line, "#") {
+			info.Columns = cols
+			info.Headers++
+			continue // skip header
+		}
+		llen := len(line)
+		if llen == 0 {
+			continue
+		}
+		if _, err := strconv.ParseFloat(cols[0], 64); err != nil {
+			if headCheck {
+				info.Headers++
+				continue
+			}
+		}
+		if info.Stats.SampleSize >= count {
+			break
+		}
+		headCheck = false
+		info.Stats.SampleSize++
+		if llen > info.Stats.Max {
+			info.Stats.Max = llen
+		} else if info.Stats.Min == 0 || info.Stats.Min > llen {
+			info.Stats.Min = llen
+		}
+		// for i := range info.
+		// sum += int64(llen)
+	}
+	info.Stats.Avg = int(int64(info.Stats.SampleSize) / sum)
+	return info, nil
+}
+
+/*
+Scan for header count, reset file
+*/
+type Recorder interface {
+	GetRec() Record
+}
+
+// func NewRig()
+func Makers(in string) Record {
+	_, err := strconv.Atoi(in)
+	if err == nil {
+		var v NX32
+		return &v
+	}
+	_, err = strconv.ParseFloat(in, 32)
+	if err == nil {
+		var v F32
+		return &v
+	}
+	var v F32
+	if err = v.Input(in); err != nil {
+		log.Printf("input fail: %v", err)
+	}
+	return &v
+}
+
+// EvaluateFields establishs what type the columns represent
+func EvaluateFields(filename string) (int, error) {
+	fileSize, err := FileSize(filename)
+	if err != nil {
+		return 0, err
+	}
+
+	r, err := NewFileReader(filename)
+	if err != nil {
+		return 0, err
+	}
+	const sampleSize = 1000
+	sum := 0
+	counter := 0
+	fn := func(s string) error {
+		//log.Println("linelen:", len(s))
+		sum += len(s)
+		if counter++; counter >= sampleSize {
+			return errSampleComplete
+		}
+		return nil
+	}
+	err = LineReader(r, fn)
+	if err != nil && err != errSampleComplete {
+		return 0, err
+	}
+	lineSize := sum / counter
+	//log.Println("average line length:", lineSize)
+	log.Printf("%d / %d = average line length: %d\n", sum, sampleSize, lineSize)
+	// TODO: do test compression on collected data to understand compression ratio
+	if filepath.Ext(filename) == ".gz" {
+		fileSize *= 10 // rough guesstimate of compression ratio
+	}
+	return int(fileSize) / lineSize, nil
 }

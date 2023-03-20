@@ -24,6 +24,7 @@ type Record interface {
 	Decode([]byte) error
 	Encode([]byte) error
 	Size() int
+	String() string
 }
 
 func FMe[T Number](b []byte, num T) error {
@@ -32,6 +33,7 @@ func FMe[T Number](b []byte, num T) error {
 
 // type Kind int
 type Size int
+
 type What struct {
 	kind Kind
 	size Size
@@ -46,11 +48,10 @@ type Runner interface {
 }
 
 /*
-	build list of decoders with offset
-	 - decode bytes
-	 - assign to array of float64
-	 -
-
+build list of decoders with offset
+  - decode bytes
+  - assign to array of float64
+    -
 */
 func buildHandler(ss ...What) Handler {
 	// var fns []Record
@@ -98,14 +99,14 @@ const (
 type Decipher func([]byte) (interface{}, error)
 type Encipher func([]byte, interface{}) error
 
-//Holder manages a binary packed table
+// Holder manages a binary packed table
 // layout on disk is ordered to do word alignment if possible
 type Holder struct {
-	width   int // binary record width
-	columns []string
-	sizes   []int
-	layout  []int // column order that goes on disk
-	offset  []int
+	RecordWidth int // binary record width
+	Columns     []string
+	sizes       []int
+	layout      []int // column order that goes on disk
+	offset      []int
 	// kinds    []Kind
 	decoders  []Decipher
 	encoders  []Encipher
@@ -129,7 +130,7 @@ type RecordHolder struct {
 func (h *Holder) NewRecord() *RecordHolder {
 	rh := &RecordHolder{
 		hold:   h,
-		values: make([]Record, len(h.columns)),
+		values: make([]Record, len(h.Columns)),
 	}
 	copy(rh.values, h.recorders)
 	return rh
@@ -257,19 +258,18 @@ type HolderHeader struct {
 }
 
 /*
-func (fp *FireJulySrc) Encode(buf []byte) error {
-	if len(buf) < fp.Size() {
-		log.Printf("buffer size: %d -- we need: %d", len(buf), fp.Size())
-		return io.EOF
-	}
-	const off = 4
-	idx := 0
-	binary.LittleEndian.PutUint32(buf[idx:], math.Float32bits(float32(fp.Lat)))
-	idx += 4
-	binary.LittleEndian.PutUint32(buf[idx:], math.Float32bits(float32(fp.Lon)))
-	idx += 4
-	binary.LittleEndian.PutUint32(buf[idx:], fp.Score)
-
+	func (fp *FireJulySrc) Encode(buf []byte) error {
+		if len(buf) < fp.Size() {
+			log.Printf("buffer size: %d -- we need: %d", len(buf), fp.Size())
+			return io.EOF
+		}
+		const off = 4
+		idx := 0
+		binary.LittleEndian.PutUint32(buf[idx:], math.Float32bits(float32(fp.Lat)))
+		idx += 4
+		binary.LittleEndian.PutUint32(buf[idx:], math.Float32bits(float32(fp.Lon)))
+		idx += 4
+		binary.LittleEndian.PutUint32(buf[idx:], fp.Score)
 */
 func (hh HolderHeader) Encode(b []byte) error {
 	n := copy(b, hh.Magic[:])
@@ -350,7 +350,7 @@ func (hh HolderHeader) Equal(x HolderHeader) error {
 // if precision == "s" the field is a fixed with string of maxSize width
 func NewHolder(columns ...string) (*Holder, error) {
 	hold := &Holder{
-		columns: make([]string, len(columns)),
+		Columns: make([]string, len(columns)),
 		sizes:   make([]int, len(columns)),
 		// kinds:   make([]Kind, len(columns)),
 		layout: make([]int, len(columns)),
@@ -452,7 +452,7 @@ func (rh RecordHolder) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	// log.Println("START")
 	(&buf).WriteString(`{`)
-	for i, col := range rh.hold.columns {
+	for i, col := range rh.hold.Columns {
 		if false {
 			log.Printf("COL: %d", i)
 		}

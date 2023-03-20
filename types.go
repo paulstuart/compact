@@ -7,9 +7,73 @@ import (
 	"strconv"
 )
 
+type DataType int
+
+const (
+	DT_Unknown DataType = iota
+	DT_Byte
+	DT_F1
+	DT_F16
+	DT_F32
+	DT_F64
+	DT_X16
+	DT_X32
+	DT_X64
+)
+
 type HoldsByte byte
 
+// var pp interface{} = &P{}
+
+// validate Record interface is met
+var (
+	_ Record = (*HoldsByte)(nil)
+	_ Record = (*FP1)(nil)
+	_ Record = (*F16)(nil)
+	_ Record = (*F32)(nil)
+	_ Record = (*F64)(nil)
+)
+
+// var _ Record = (*HoldsF16)(nil)  //.Record()
+// var _ MyInterface = (*MyType)(nil)
+type RecFun func() Record
+
+func getF16() *F16 {
+	var f F16
+	return &f
+}
+
+func foobar() Record {
+	return getF16()
+}
+
+var (
+	dtMap = map[DataType]RecFun{
+		DT_Byte: foobar,
+	}
+)
+
+// var (
+// 	dtMap = map[DataType]RecFun{
+// 		DT_Byte: func() {
+// 			return &F16{}
+// 		},
+// 	}
+// )
+
+type RecMux interface {
+	Mux() Record
+}
+
 type HoldsF16 F16
+
+func (h HoldsByte) Size() int {
+	return 1
+}
+
+func (h HoldsByte) String() string {
+	return strconv.Itoa(int(h))
+}
 
 func (h HoldsByte) Encode(b []byte) error {
 	b[0] = byte(h)
@@ -33,49 +97,29 @@ func (h *HoldsByte) Input(s string) error {
 	return nil
 }
 
-// HoldsF16
+// type HoldsI16 uint16
 
-func (h HoldsF16) Encode(b []byte) error {
-	binary.LittleEndian.PutUint16(b, uint16(h))
-	return nil
-}
+// func (h HoldsI16) Encode(b []byte) error {
+// 	binary.LittleEndian.PutUint16(b, uint16(h))
+// 	return nil
+// }
 
-func (h *HoldsF16) Decode(b []byte) error {
-	*h = HoldsF16(binary.LittleEndian.Uint16(b))
-	return nil
-}
+// func (h *HoldsI16) Decode(b []byte) error {
+// 	*h = HoldsI16(b[0])
+// 	return nil
+// }
 
-func (h *HoldsF16) Input(s string) error {
-	v, err := strconv.ParseFloat(s, 64)
-	if err != nil {
-		return fmt.Errorf("parse fail for F16 %q -- %w", s, err)
-	}
-	return (*F16)(h).FromFloat64(v)
-}
-
-type HoldsI16 uint16
-
-func (h HoldsI16) Encode(b []byte) error {
-	binary.LittleEndian.PutUint16(b, uint16(h))
-	return nil
-}
-
-func (h *HoldsI16) Decode(b []byte) error {
-	*h = HoldsI16(b[0])
-	return nil
-}
-
-func (h HoldsI16) Input(s string) error {
-	var v int64
-	if _, err := fmt.Scanf("%d", &v); err != nil {
-		return err
-	}
-	if v > math.MaxUint16 {
-		return fmt.Errorf("boo hoo - %w", ErrExceeds)
-	}
-	h = HoldsI16(v)
-	return nil
-}
+// func (h HoldsI16) Input(s string) error {
+// 	var v int64
+// 	if _, err := fmt.Scanf("%d", &v); err != nil {
+// 		return err
+// 	}
+// 	if v > math.MaxUint16 {
+// 		return fmt.Errorf("boo hoo - %w", ErrExceeds)
+// 	}
+// 	h = HoldsI16(v)
+// 	return nil
+// }
 
 type HoldsI32 uint32
 
@@ -189,65 +233,161 @@ func (h *HoldsText) Input(s string) error {
 	return nil
 }
 
-/*
-func (fp *FireJulySrc) Encode(buf []byte) error {
-	if len(buf) < fp.Size() {
-		log.Printf("buffer size: %d -- we need: %d", len(buf), fp.Size())
-		return io.EOF
+// =============================================================================================== //
+
+type F32 float32
+
+const F32_max = math.MaxFloat32
+const _F32_size = 4
+
+func (f F32) Size() int {
+	return _F32_size
+}
+
+func (f *F32) Decode(b []byte) error {
+	if len(b) < _F32_size {
+		return ErrTooSmall
 	}
-	const off = 4
-	idx := 0
-	binary.LittleEndian.PutUint32(buf[idx:], math.Float32bits(float32(fp.Lat)))
-	idx += 4
-	binary.LittleEndian.PutUint32(buf[idx:], math.Float32bits(float32(fp.Lon)))
-	idx += 4
-	binary.LittleEndian.PutUint32(buf[idx:], fp.Score)
-	idx += 4
-	binary.LittleEndian.PutUint32(buf[idx:], math.Float32bits(float32(fp.Baseline_avg)))
-	idx += 4
-	binary.LittleEndian.PutUint32(buf[idx:], math.Float32bits(float32(fp.BP)))
-	idx += 4
-	binary.LittleEndian.PutUint32(buf[idx:], math.Float32bits(float32(fp.FLEP4)))
-	idx += 4
-	binary.LittleEndian.PutUint32(buf[idx:], math.Float32bits(float32(fp.FLEP8)))
-	idx += 4
-	binary.LittleEndian.PutUint32(buf[idx:], uint32(fp.Baseline_avg_counts))
-	idx += 4
-	binary.LittleEndian.PutUint32(buf[idx:], uint32(fp.Baseline_avg_magnitude))
-	idx += 4
-	binary.LittleEndian.PutUint32(buf[idx:], math.Float32bits(float32(fp.Future_avg_2050_Counts)))
+	*f = F32(math.Float32frombits(binary.LittleEndian.Uint32(b)))
 	return nil
 }
 
-func (ss *FireJulySrc) Decode(buf []byte) error {
-	if len(buf) < ss.Size() {
-		log.Printf("buffer size: %d -- we need: %d", len(buf), ss.Size())
-		return io.EOF
-	}
-	idx := 0
-	const off = 4
-	ss.Lat = GeoType(math.Float32frombits(	return (*F16)(h).FromFloat64(v)
-(buf[idx:])))
-	idx += off
-	ss.Lon = GeoType(math.Float32frombits(binary.LittleEndian.Uint32(buf[idx:])))
-	idx += off
-
-	ss.Score = binary.LittleEndian.Uint32(buf[idx:])
-	idx += off
-	ss.Baseline_avg = decimal_5(math.Float32frombits(binary.LittleEndian.Uint32(buf[idx:])))
-	idx += 4
-	ss.BP = decimal_4(math.Float32frombits(binary.LittleEndian.Uint32(buf[idx:])))
-	idx += 4
-	ss.FLEP4 = decimal_4(math.Float32frombits(binary.LittleEndian.Uint32(buf[idx:])))
-	idx += 4
-	ss.FLEP8 = decimal_4(math.Float32frombits(binary.LittleEndian.Uint32(buf[idx:])))
-	idx += 4
-	ss.Baseline_avg_counts = int32(binary.LittleEndian.Uint32(buf[idx:]))
-	idx += 4
-	ss.Baseline_avg_magnitude = int32(binary.LittleEndian.Uint32(buf[idx:]))
-	idx += 4
-	ss.Future_avg_2050_Counts = decimal_5(math.Float32frombits(binary.LittleEndian.Uint32(buf[idx:])))
+func (f F32) Encode(b []byte) error {
+	binary.LittleEndian.PutUint32(b, math.Float32bits(float32(f)))
 	return nil
 }
 
-*/
+func (f *F32) FromFloat64(v float64) error {
+	*f = F32(v)
+	return nil
+}
+
+func (f F32) String() string {
+	return strconv.FormatFloat(float64(f), 'f', 5, 32)
+}
+
+func (f *F32) Input(s string) error {
+	v, err := strconv.ParseFloat(s, 32)
+	if err != nil {
+		return fmt.Errorf("parse fail for F32 %q -- %w", s, err)
+	}
+	// return (*F32)(f).FromFloat64(v)
+	return f.FromFloat64(v)
+}
+
+// ==========================================================================================//
+
+type F64 float64
+
+const F64_max = math.MaxFloat64
+const _F64_size = 8
+
+func (f F64) Size() int {
+	return _F64_size
+}
+
+func (f *F64) Decode(b []byte) error {
+	if len(b) < _F64_size {
+		return ErrTooSmall
+	}
+	*f = F64(math.Float64frombits(binary.LittleEndian.Uint64(b)))
+	return nil
+}
+
+func (f F64) Encode(b []byte) error {
+	binary.LittleEndian.PutUint64(b, math.Float64bits(float64(f)))
+	return nil
+}
+
+func (f *F64) FromFloat64(v float64) error {
+	*f = F64(v)
+	return nil
+}
+
+func (f F64) String() string {
+	return strconv.FormatFloat(float64(f), 'f', 9, 32)
+}
+
+func (f *F64) Input(s string) error {
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return fmt.Errorf("parse fail for F64 %q -- %w", s, err)
+	}
+	return (*F64)(f).FromFloat64(v)
+}
+
+// ===============================================================================/
+
+type NX32 int32
+
+const NX32_max = math.MaxInt32
+const _NX32_size = 4
+
+func (f NX32) Size() int {
+	return _NX32_size
+}
+
+func (f *NX32) Decode(b []byte) error {
+	if len(b) < _NX32_size {
+		return ErrTooSmall
+	}
+	*f = NX32(binary.LittleEndian.Uint32(b))
+	return nil
+}
+
+func (f NX32) Encode(b []byte) error {
+	binary.LittleEndian.PutUint32(b, uint32(f))
+	return nil
+}
+
+func (f NX32) String() string {
+	return strconv.FormatInt(int64(f), 32)
+}
+
+func (f *NX32) Input(s string) error {
+	v, err := strconv.Atoi(s)
+	if err != nil {
+		return fmt.Errorf("parse fail for NX32 %q -- %w", s, err)
+	}
+	*f = NX32(v)
+
+	return nil
+}
+
+// ================================================================================== //
+
+type NX64 int64
+
+const NX64_max = math.MaxInt64
+const _NX64_size = 8
+
+func (f NX64) Size() int {
+	return _NX64_size
+}
+
+func (f *NX64) Decode(b []byte) error {
+	if len(b) < _NX64_size {
+		return ErrTooSmall
+	}
+	*f = NX64(binary.LittleEndian.Uint64(b))
+	return nil
+}
+
+func (f NX64) Encode(b []byte) error {
+	binary.LittleEndian.PutUint64(b, uint64(f))
+	return nil
+}
+
+func (f NX64) String() string {
+	return strconv.FormatInt(int64(f), 64)
+}
+
+func (f *NX64) Input(s string) error {
+	v, err := strconv.Atoi(s)
+	if err != nil {
+		return fmt.Errorf("parse fail for NX64 %q -- %w", s, err)
+	}
+	*f = NX64(v)
+
+	return nil
+}

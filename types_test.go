@@ -3,12 +3,14 @@ package compact
 import (
 	"fmt"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestF16(t *testing.T) {
 	const expects = 123.34
 	s := fmt.Sprint(expects)
-	var h, k HoldsF16
+	var h, k F16
 	t.Logf("expects %.2f with string %q", expects, s)
 	err := (&h).Input(s)
 	if err != nil {
@@ -19,8 +21,8 @@ func TestF16(t *testing.T) {
 	}
 	t.Logf("F16 val: %v", h)
 	buf := make([]byte, 4)
-	h.Encode(buf)
-	(&k).Decode(buf)
+	_ = h.Encode(buf)
+	_ = (&k).Decode(buf)
 	if h != k {
 		t.Fatalf("want: %d -- have %d", h, k)
 	}
@@ -37,8 +39,8 @@ func TestI8(t *testing.T) {
 		t.Fatal(err)
 	}
 	buf := make([]byte, 4)
-	h.Encode(buf)
-	(&k).Decode(buf)
+	_ = h.Encode(buf)
+	_ = (&k).Decode(buf)
 	if h != k {
 		t.Fatalf("want: %d -- have %d", h, k)
 	}
@@ -121,4 +123,29 @@ func TestText(t *testing.T) {
 			t.Fatalf("still want: %d -- have %d", h, k)
 		}
 	*/
+}
+
+func FuzzF64(f *testing.F) {
+	testcases := []float64{1.23, 101.0, 23.42, 1999.0}
+	for _, tc := range testcases {
+		f.Add(tc) // Use f.Add to provide a seed corpus
+	}
+	f.Fuzz(func(t *testing.T, in float64) {
+		t.Logf("fuzzy wuzzy: %f", in)
+		var orig, dupe F64
+		orig = F64(in)
+		b := make([]byte, orig.Size())
+		err := orig.Encode(b)
+		assert.NoError(t, err)
+		err = (&dupe).Decode(b)
+		assert.NoError(t, err)
+		assert.Equal(t, orig, dupe)
+		t.Logf("Before: %q, after: %q", orig, dupe)
+		// if orig != dupe {
+		// 	t.Errorf("Before: %q, after: %q", orig, dupe)
+		// }
+		// if utf8.ValidString(orig) && !utf8.ValidString(rev) {
+		// 	t.Errorf("Reverse produced invalid UTF-8 string %q", rev)
+		// }
+	})
 }
